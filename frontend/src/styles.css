@@ -30,7 +30,7 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 9999;
 }
 
 .app-header h1 {
@@ -360,6 +360,19 @@ input.input-error {
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.05em;
+}
+
+/* ── Leaflet z-index containment ────────────────────────────────────────── */
+/* Keep all Leaflet layers below the sticky navbar (z-index: 9999) */
+.leaflet-pane,
+.leaflet-top,
+.leaflet-bottom,
+.leaflet-control {
+  z-index: 1 !important;
+}
+
+.leaflet-container {
+  z-index: 0;
 }
 
 /* ── Print styles ───────────────────────────────────────────────────────── */
