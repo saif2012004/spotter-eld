@@ -274,3 +274,36 @@ class RecapFieldsTest(TestCase):
         for log in logs:
             for val in log["recap"].values():
                 self.assertEqual(val, round(val * 4) / 4, f"{val} is not a quarter-hour multiple")
+
+
+class DailyTotals24hTest(TestCase):
+    """Every daily log's totals must sum to exactly 24 hours after padding."""
+
+    def _check_logs(self, events, cycle=0.0):
+        logs = _build_daily_logs(events, cycle_used_hours=cycle)
+        for log in logs:
+            total = sum(log["totals"].values())
+            self.assertAlmostEqual(
+                total, 24.0, delta=0.02,
+                msg=f"Day {log['date']} totals sum to {total:.4f}, expected 24.0",
+            )
+
+    def test_short_trip(self):
+        self._check_logs(plan_trip(_START, 0.0, 50.0, 100.0))
+
+    def test_multi_day_trip(self):
+        self._check_logs(plan_trip(_START, 0.0, 0.0, 700.0))
+
+    def test_trip_with_restart(self):
+        self._check_logs(plan_trip(_START, 65.0, 0.0, 400.0), cycle=65.0)
+
+    def test_long_trip(self):
+        self._check_logs(plan_trip(_START, 0.0, 0.0, 2_000.0))
+
+    def test_synthetic_events_excluded_from_remarks(self):
+        events = plan_trip(_START, 0.0, 50.0, 100.0)
+        logs = _build_daily_logs(events, cycle_used_hours=0.0)
+        for log in logs:
+            for ev in log["events"]:
+                if ev.get("synthetic"):
+                    self.assertEqual(ev["note"], "", "Synthetic event note must be empty")

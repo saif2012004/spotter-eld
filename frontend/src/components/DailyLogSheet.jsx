@@ -337,8 +337,8 @@ export default function DailyLogSheet({
         Include time and location of any stops, pickups, dropoffs, or fuel stops
       </text>
 
-      {/* Remark lines */}
-      {events.slice(0, MAX_REMARKS).map((ev, i) => {
+      {/* Remark lines — synthetic padding events excluded */}
+      {events.filter(e => !e.synthetic).slice(0, MAX_REMARKS).map((ev, i) => {
         const y = REM_TOP + REM_HDR_H + 4 + i * REM_LINE_H
         const milesStr = ev.status === 'driving' && ev.miles > 0
           ? `  (${ev.miles.toFixed(1)} mi)`
@@ -356,7 +356,7 @@ export default function DailyLogSheet({
           </g>
         )
       })}
-      {events.length > MAX_REMARKS && (
+      {events.filter(e => !e.synthetic).length > MAX_REMARKS && (
         <text x={PAD + 10} y={REM_TOP + REM_HDR_H + 4 + MAX_REMARKS * REM_LINE_H + 10}
               fontSize={9} fill="#94a3b8" fontFamily="Arial,sans-serif">
           … {events.length - MAX_REMARKS} additional events not shown

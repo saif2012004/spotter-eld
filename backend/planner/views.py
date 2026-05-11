@@ -7,7 +7,7 @@ from rest_framework.response import Response
 
 from planner.serializers import PlanTripRequestSerializer
 from planner.services.geocoding import GeocodingError, geocode
-from planner.services.hos import DutyStatus, plan_trip
+from planner.services.hos import DutyStatus, Event, plan_trip
 from planner.services.routing import RoutingError, get_route
 
 logger = logging.getLogger('planner')
@@ -73,6 +73,24 @@ def _group_by_day(events):
     return dict(sorted(day_map.items()))
 
 
+def _pad_to_24h(day, events):
+    """Prepend/append synthetic OFF_DUTY segments so the day spans exactly 00:00–24:00."""
+    day_start = datetime(day.year, day.month, day.day)
+    day_end   = day_start + timedelta(days=1)
+    padded = list(events)
+    if padded and padded[0].start > day_start:
+        padded.insert(0, Event(
+            start=day_start, end=padded[0].start,
+            status=DutyStatus.OFF_DUTY, location="Off duty", note="__synthetic__",
+        ))
+    if padded and padded[-1].end < day_end:
+        padded.append(Event(
+            start=padded[-1].end, end=day_end,
+            status=DutyStatus.OFF_DUTY, location="Off duty", note="__synthetic__",
+        ))
+    return padded
+
+
 def _build_daily_logs(
     events,
     cycle_used_hours: float = 0.0,
@@ -86,10 +104,11 @@ def _build_daily_logs(
     cumulative_on_duty = 0.0  # on-duty hours from earlier days in this trip
 
     for day_idx, (day, day_events) in enumerate(grouped.items()):
+        padded = _pad_to_24h(day, day_events)
         totals = {"off_duty": 0.0, "sleeper": 0.0, "driving": 0.0, "on_duty_not_driving": 0.0}
         miles_today = 0.0
 
-        for ev in day_events:
+        for ev in padded:
             h = _hours(ev)
             miles_today += ev.miles
             status_key = ev.status.value
@@ -128,13 +147,14 @@ def _build_daily_logs(
                 "to_location":   to_loc,
                 "events": [
                     {
-                        "start":    _fmt_time(ev.start),
-                        "end":      _fmt_time(ev.end),
-                        "status":   ev.status.value,
-                        "location": ev.location,
-                        "note":     ev.note,
+                        "start":     _fmt_time(ev.start),
+                        "end":       _fmt_time(ev.end),
+                        "status":    ev.status.value,
+                        "location":  ev.location,
+                        "note":      "" if ev.note == "__synthetic__" else ev.note,
+                        "synthetic": ev.note == "__synthetic__",
                     }
-                    for ev in day_events
+                    for ev in padded
                 ],
                 "totals":      {k: round(v, 2) for k, v in totals.items()},
                 "miles_today": round(miles_today, 2),
