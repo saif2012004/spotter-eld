@@ -21,6 +21,11 @@ def _hours(ev) -> float:
     return (ev.end - ev.start).total_seconds() / 3600
 
 
+def _round_q(v: float) -> float:
+    """Round to nearest quarter-hour (FMCSA standard)."""
+    return round(v * 4) / 4
+
+
 def _fmt_time(dt: datetime) -> str:
     return dt.strftime("%H:%M")
 
@@ -68,11 +73,13 @@ def _group_by_day(events):
     return dict(sorted(day_map.items()))
 
 
-def _build_daily_logs(events):
+def _build_daily_logs(events, cycle_used_hours: float = 0.0):
     split = _split_at_midnight(events)
     grouped = _group_by_day(split)
 
     logs = []
+    cumulative_on_duty = 0.0  # on-duty hours from earlier days in this trip
+
     for day, day_events in grouped.items():
         totals = {"off_duty": 0.0, "sleeper": 0.0, "driving": 0.0, "on_duty_not_driving": 0.0}
         miles_today = 0.0
@@ -80,9 +87,14 @@ def _build_daily_logs(events):
         for ev in day_events:
             h = _hours(ev)
             miles_today += ev.miles
-            status_key = ev.status.value  # already matches the totals keys
+            status_key = ev.status.value
             if status_key in totals:
                 totals[status_key] += h
+
+        on_duty_today = totals["driving"] + totals["on_duty_not_driving"]
+        prev_7        = cycle_used_hours + cumulative_on_duty
+        total_8       = on_duty_today + prev_7
+        available     = max(0.0, 70.0 - total_8)
 
         logs.append(
             {
@@ -99,8 +111,16 @@ def _build_daily_logs(events):
                 ],
                 "totals": {k: round(v, 2) for k, v in totals.items()},
                 "miles_today": round(miles_today, 2),
+                "recap": {
+                    "on_duty_hours_today":           _round_q(on_duty_today),
+                    "on_duty_hours_previous_7_days": _round_q(prev_7),
+                    "total_on_duty_8_days":          _round_q(total_8),
+                    "hours_available_tomorrow":      _round_q(available),
+                },
             }
         )
+
+        cumulative_on_duty += on_duty_today
 
     return logs
 
@@ -289,7 +309,7 @@ def plan_trip_view(request):
                 ],
             },
             "stops":      _derive_stops(events),
-            "daily_logs": _build_daily_logs(events),
+            "daily_logs": _build_daily_logs(events, float(data["cycle_used_hours"])),
             "summary":    _compute_summary(events, start_time, data["cycle_used_hours"]),
         }
 

@@ -154,6 +154,9 @@ export default function DailyLogSheet({
 
   const onDutyH = (totals.driving || 0) + (totals.on_duty_not_driving || 0)
   const totalH  = Object.values(totals).reduce((a, b) => a + b, 0)
+  const recap   = dailyLog.recap ?? {}
+
+  const fmtR = (v) => (v !== undefined && v !== null) ? v.toFixed(1) : '—'
 
   // Derive From / To from first / last meaningful event location
   const meaningful = events.filter(e => e.location !== 'Rest')
@@ -402,10 +405,10 @@ export default function DailyLogSheet({
         y={RECAP_TOP + 20}
         title="70 Hour / 8 Day Rule"
         rows={[
-          ['On-duty hours today',          fmtH(onDutyH)],
-          ['On-duty hours previous 7 days','—'],
-          ['Total on-duty hours (8 days)', '—'],
-          ['Hours available after today',  '—'],
+          ['On-duty hours today',          fmtR(recap.on_duty_hours_today)],
+          ['On-duty hours previous 7 days', fmtR(recap.on_duty_hours_previous_7_days)],
+          ['Total on-duty hours (8 days)', fmtR(recap.total_on_duty_8_days)],
+          ['Hours available after today',  fmtR(recap.hours_available_tomorrow)],
         ]}
       />
 

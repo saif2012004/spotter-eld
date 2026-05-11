@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from django.test import TestCase
 
+from planner.views import _build_daily_logs, _split_at_midnight
 from planner.services.hos import (
     BREAK_HRS,
     BREAK_TRIGGER_HRS,
@@ -220,3 +221,56 @@ class PickupDropoffTest(TestCase):
         events = plan_trip(_START, 0.0, 100.0, 200.0)
         self.assertEqual(len([e for e in events if e.location == "Pickup"]),  1)
         self.assertEqual(len([e for e in events if e.location == "Dropoff"]), 1)
+
+
+class RecapFieldsTest(TestCase):
+    """Recap fields are computed correctly per day in _build_daily_logs."""
+
+    def test_recap_keys_present(self):
+        events = plan_trip(_START, 0.0, 0.0, 100.0)
+        logs = _build_daily_logs(events, cycle_used_hours=0.0)
+        for log in logs:
+            self.assertIn("recap", log)
+            for key in ("on_duty_hours_today", "on_duty_hours_previous_7_days",
+                        "total_on_duty_8_days", "hours_available_tomorrow"):
+                self.assertIn(key, log["recap"])
+
+    def test_day0_previous_equals_cycle_input(self):
+        events = plan_trip(_START, 20.0, 0.0, 100.0)
+        logs = _build_daily_logs(events, cycle_used_hours=20.0)
+        self.assertEqual(logs[0]["recap"]["on_duty_hours_previous_7_days"], 20.0)
+
+    def test_total_8_days_is_sum(self):
+        events = plan_trip(_START, 10.0, 0.0, 100.0)
+        logs = _build_daily_logs(events, cycle_used_hours=10.0)
+        for log in logs:
+            r = log["recap"]
+            self.assertAlmostEqual(
+                r["total_on_duty_8_days"],
+                r["on_duty_hours_today"] + r["on_duty_hours_previous_7_days"],
+                places=2,
+            )
+
+    def test_hours_available_never_negative(self):
+        events = plan_trip(_START, 68.0, 0.0, 400.0)
+        logs = _build_daily_logs(events, cycle_used_hours=68.0)
+        for log in logs:
+            self.assertGreaterEqual(log["recap"]["hours_available_tomorrow"], 0.0)
+
+    def test_multiday_previous_accumulates(self):
+        # Multi-day trip: day 1's previous should be cycle_used; day 2's should include day 1 on-duty
+        events = plan_trip(_START, 0.0, 0.0, 700.0)
+        logs = _build_daily_logs(events, cycle_used_hours=5.0)
+        self.assertEqual(logs[0]["recap"]["on_duty_hours_previous_7_days"], 5.0)
+        self.assertGreater(
+            logs[1]["recap"]["on_duty_hours_previous_7_days"],
+            5.0,
+            "Day 2 previous-7-days should include day 1 on-duty hours",
+        )
+
+    def test_values_rounded_to_quarter_hour(self):
+        events = plan_trip(_START, 0.0, 0.0, 300.0)
+        logs = _build_daily_logs(events, cycle_used_hours=0.0)
+        for log in logs:
+            for val in log["recap"].values():
+                self.assertEqual(val, round(val * 4) / 4, f"{val} is not a quarter-hour multiple")
