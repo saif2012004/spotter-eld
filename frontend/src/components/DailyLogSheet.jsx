@@ -25,7 +25,7 @@ const REM_BOT      = REM_TOP + REM_HDR_H + REM_BODY_H + 8
 const SHIP_TOP  = REM_BOT + 12
 const SHIP_H    = 76
 const RECAP_TOP = SHIP_TOP + SHIP_H + 12
-const RECAP_H   = 110
+const RECAP_H   = 140
 const SVG_H     = RECAP_TOP + RECAP_H + 12
 
 // ── Lookup tables ────────────────────────────────────────────────────────
