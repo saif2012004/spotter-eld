@@ -307,3 +307,77 @@ class DailyTotals24hTest(TestCase):
             for ev in log["events"]:
                 if ev.get("synthetic"):
                     self.assertEqual(ev["note"], "", "Synthetic event note must be empty")
+
+
+class RestartCycleResetTest(TestCase):
+    """34-hour restart must reset the 70-hr cycle counter in both HOS sim and recap."""
+
+    def test_cycle_resets_after_34_hour_restart(self):
+        # 5000 miles with 65 hrs used — forces two 34-hr restarts
+        events = plan_trip(
+            start_time=datetime(2026, 5, 11, 8, 0),
+            cycle_used_hours=65,
+            miles_to_pickup=3000,
+            miles_pickup_to_dropoff=2000,
+        )
+        restart_events = [e for e in events if "34-hour restart" in e.note]
+        self.assertGreaterEqual(len(restart_events), 1, "Expected at least one 34-hr restart")
+
+        # Between each pair of consecutive restarts, on-duty must stay within 70 hrs
+        boundaries = [e.end for e in restart_events] + [events[-1].end]
+        window_start = restart_events[0].end
+        for window_end in boundaries[1:]:
+            window_on_duty = sum(
+                (e.end - e.start).total_seconds() / 3600
+                for e in events
+                if e.start >= window_start and e.end <= window_end
+                and e.status in (DutyStatus.DRIVING, DutyStatus.ON_DUTY_NOT_DRIVING)
+            )
+            self.assertLessEqual(
+                window_on_duty, 70.0 + 1e-6,
+                f"On-duty hours in window ending {window_end} exceeded 70: {window_on_duty:.2f}",
+            )
+            window_start = window_end
+
+    def test_second_restart_triggered_on_long_trip(self):
+        # 5000 miles with 65 hrs cycle used — needs two 34-hr restarts
+        events = plan_trip(
+            start_time=datetime(2026, 5, 11, 8, 0),
+            cycle_used_hours=65,
+            miles_to_pickup=3000,
+            miles_pickup_to_dropoff=2000,
+        )
+        restart_events = [e for e in events if "34-hour restart" in e.note]
+        self.assertGreaterEqual(len(restart_events), 2, "Expected a second 34-hr restart")
+
+    def test_recap_total_never_exceeds_70(self):
+        events = plan_trip(
+            start_time=datetime(2026, 5, 11, 8, 0),
+            cycle_used_hours=65,
+            miles_to_pickup=3000,
+            miles_pickup_to_dropoff=2000,
+        )
+        logs = _build_daily_logs(events, cycle_used_hours=65.0)
+        for log in logs:
+            self.assertLessEqual(
+                log["recap"]["total_on_duty_8_days"], 70.0,
+                f"Day {log['date']}: total_on_duty_8_days={log['recap']['total_on_duty_8_days']} exceeds 70",
+            )
+
+    def test_recap_resets_after_restart_day(self):
+        events = plan_trip(
+            start_time=datetime(2026, 5, 11, 8, 0),
+            cycle_used_hours=65,
+            miles_to_pickup=3000,
+            miles_pickup_to_dropoff=2000,
+        )
+        logs = _build_daily_logs(events, cycle_used_hours=65.0)
+        # After a restart completes, the next day's previous_7_days resets toward 0
+        reset_days = [
+            log for log in logs
+            if log["recap"]["on_duty_hours_previous_7_days"] == 0.0
+        ]
+        self.assertGreaterEqual(
+            len(reset_days), 1,
+            "Expected at least one day where previous_7_days resets to 0 after restart",
+        )

@@ -100,8 +100,16 @@ def _build_daily_logs(
     split = _split_at_midnight(events)
     grouped = _group_by_day(split)
 
+    # Dates on which a 34-hr restart completes — recap resets the day after
+    restart_end_dates = {
+        ev.end.date()
+        for ev in events
+        if "34-hour restart" in ev.note
+    }
+
     logs = []
-    cumulative_on_duty = 0.0  # on-duty hours from earlier days in this trip
+    cumulative_on_duty   = 0.0   # on-duty hours since last restart (or trip start)
+    effective_cycle_base = float(cycle_used_hours)  # resets to 0 after each restart
 
     for day_idx, (day, day_events) in enumerate(grouped.items()):
         padded = _pad_to_24h(day, day_events)
@@ -116,9 +124,16 @@ def _build_daily_logs(
                 totals[status_key] += h
 
         on_duty_today = totals["driving"] + totals["on_duty_not_driving"]
-        prev_7        = cycle_used_hours + cumulative_on_duty
-        total_8       = on_duty_today + prev_7
-        available     = max(0.0, 70.0 - total_8)
+
+        # Reset cycle window when a 34-hr restart completed today so the
+        # recap reflects the post-restart cycle (not the pre-restart total).
+        if day in restart_end_dates:
+            cumulative_on_duty   = 0.0
+            effective_cycle_base = 0.0
+
+        prev_7    = effective_cycle_base + cumulative_on_duty
+        total_8   = on_duty_today + prev_7
+        available = max(0.0, 70.0 - total_8)
 
         # Determine meaningful FROM / TO labels for the log sheet header
         has_pickup  = any(ev.location == "Pickup"  for ev in day_events)
