@@ -4,13 +4,13 @@ A full-stack web application that lets a commercial truck driver enter a current
 
 ---
 
-## Demo
+## Live Demo
 
 | Resource | Link |
 |---|---|
-| Live app (Vercel) | _deploy and paste URL here_ |
-| Backend API (Render) | _deploy and paste URL here_ |
-| Walkthrough video (Loom) | _record and paste URL here_ |
+| Live app | https://spotter-eld-phi.vercel.app |
+| API | https://spotter-eld-backend-s73n.onrender.com/api/plan-trip/ |
+| Walkthrough video | _(coming soon)_ |
 
 ---
 
