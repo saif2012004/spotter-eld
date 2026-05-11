@@ -73,14 +73,19 @@ def _group_by_day(events):
     return dict(sorted(day_map.items()))
 
 
-def _build_daily_logs(events, cycle_used_hours: float = 0.0):
+def _build_daily_logs(
+    events,
+    cycle_used_hours: float = 0.0,
+    current_location: str = "",
+    dropoff_location: str = "",
+):
     split = _split_at_midnight(events)
     grouped = _group_by_day(split)
 
     logs = []
     cumulative_on_duty = 0.0  # on-duty hours from earlier days in this trip
 
-    for day, day_events in grouped.items():
+    for day_idx, (day, day_events) in enumerate(grouped.items()):
         totals = {"off_duty": 0.0, "sleeper": 0.0, "driving": 0.0, "on_duty_not_driving": 0.0}
         miles_today = 0.0
 
@@ -96,20 +101,42 @@ def _build_daily_logs(events, cycle_used_hours: float = 0.0):
         total_8       = on_duty_today + prev_7
         available     = max(0.0, 70.0 - total_8)
 
+        # Determine meaningful FROM / TO labels for the log sheet header
+        has_pickup  = any(ev.location == "Pickup"  for ev in day_events)
+        has_dropoff = any(ev.location == "Dropoff" for ev in day_events)
+
+        if has_pickup and has_dropoff:
+            from_loc = current_location
+            to_loc   = dropoff_location
+        elif has_pickup:
+            from_loc = current_location
+            to_loc   = f"En route to {dropoff_location}"
+        elif has_dropoff:
+            from_loc = "En route"
+            to_loc   = dropoff_location
+        elif day_idx == 0:
+            from_loc = current_location
+            to_loc   = "En route to pickup"
+        else:
+            from_loc = "En route"
+            to_loc   = "En route"
+
         logs.append(
             {
-                "date": day.isoformat(),
+                "date":          day.isoformat(),
+                "from_location": from_loc,
+                "to_location":   to_loc,
                 "events": [
                     {
-                        "start": _fmt_time(ev.start),
-                        "end": _fmt_time(ev.end),
-                        "status": ev.status.value,
+                        "start":    _fmt_time(ev.start),
+                        "end":      _fmt_time(ev.end),
+                        "status":   ev.status.value,
                         "location": ev.location,
-                        "note": ev.note,
+                        "note":     ev.note,
                     }
                     for ev in day_events
                 ],
-                "totals": {k: round(v, 2) for k, v in totals.items()},
+                "totals":      {k: round(v, 2) for k, v in totals.items()},
                 "miles_today": round(miles_today, 2),
                 "recap": {
                     "on_duty_hours_today":           _round_q(on_duty_today),
@@ -198,10 +225,10 @@ def _compute_summary(events, start_time: datetime, cycle_used_hours: float):
         days = 0
 
     return {
-        "total_driving_hours": round(total_driving, 2),
-        "total_on_duty_hours": round(total_on_duty, 2),
-        "total_trip_hours": round(total_trip_hours, 2),
-        "cycle_hours_used_after": round(base_cycle + on_duty_after, 2),
+        "total_driving_hours":   round(total_driving,            1),
+        "total_on_duty_hours":   round(total_on_duty,            1),
+        "total_trip_hours":      round(total_trip_hours,         1),
+        "cycle_hours_used_after": round(base_cycle + on_duty_after, 1),
         "days": days,
     }
 
@@ -309,7 +336,12 @@ def plan_trip_view(request):
                 ],
             },
             "stops":      _derive_stops(events),
-            "daily_logs": _build_daily_logs(events, float(data["cycle_used_hours"])),
+            "daily_logs": _build_daily_logs(
+                events,
+                float(data["cycle_used_hours"]),
+                data["current_location"],
+                data["dropoff_location"],
+            ),
             "summary":    _compute_summary(events, start_time, data["cycle_used_hours"]),
         }
 

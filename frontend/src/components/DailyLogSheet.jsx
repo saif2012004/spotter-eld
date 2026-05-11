@@ -158,10 +158,8 @@ export default function DailyLogSheet({
 
   const fmtR = (v) => (v !== undefined && v !== null) ? v.toFixed(1) : '—'
 
-  // Derive From / To from first / last meaningful event location
-  const meaningful = events.filter(e => e.location !== 'Rest')
-  const fromLoc = meaningful[0]?.location ?? '—'
-  const toLoc   = meaningful[meaningful.length - 1]?.location ?? '—'
+  const fromLoc = dailyLog.from_location ?? '—'
+  const toLoc   = dailyLog.to_location   ?? '—'
 
   return (
     <svg
@@ -412,13 +410,13 @@ export default function DailyLogSheet({
         ]}
       />
 
-      {/* 60-hr / 7-day column (placeholder — app uses 70/8) */}
+      {/* 60-hr / 7-day column — not applicable; all rows show — */}
       <RecapCol
         x={W / 2 + 12}
         y={RECAP_TOP + 20}
         title="60 Hour / 7 Day Rule (not applicable)"
         rows={[
-          ['On-duty hours today',          fmtH(onDutyH)],
+          ['On-duty hours today',          '—'],
           ['On-duty hours previous 6 days','—'],
           ['Total on-duty hours (7 days)', '—'],
           ['Hours available after today',  '—'],
